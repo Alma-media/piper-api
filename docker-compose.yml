@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  piper-tts:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - /home/alma/LLM/piper:/app/models:ro
+    environment:
+      - PIPER_MODELS_DIR=/app/models
+      - ESPEAK_DATA_PATH=/usr/share/espeak-ng-data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
