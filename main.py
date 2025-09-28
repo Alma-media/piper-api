@@ -10,12 +10,9 @@ from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel, Field
 
 # -------- Config via env vars --------
-# Map voice names to model (.onnx) and (optional) config (.json)
-# Example:
-#   export PIPER_VOICES='{"ru_irina":"/home/alma/LLM/piper/ru_RU-irina-medium.onnx", "ru_dmitri":"/home/alma/LLM/piper/ru_RU-dmitri-medium.onnx"}'
-PIPER_VOICES = os.getenv("PIPER_VOICES", "{}")
-# Default voice (key from PIPER_VOICES)
-PIPER_DEFAULT_VOICE = os.getenv("PIPER_DEFAULT_VOICE")
+# Directory containing Piper models (.onnx files with corresponding .json configs)
+# Example: export PIPER_MODELS_DIR="/home/alma/LLM/piper"
+PIPER_MODELS_DIR = os.getenv("PIPER_MODELS_DIR", "./models")
 
 # eSpeak NG data path (needed by Piper phonemizer)
 # On Arch: /usr/share/espeak-ng-data
@@ -28,7 +25,6 @@ USE_CUDA = os.getenv("PIPER_USE_CUDA", "0") == "1"
 # -------- Data models --------
 class SynthesisRequest(BaseModel):
     text: str = Field(..., description="Plain UTF-8 text to synthesize")
-    voice: Optional[str] = Field(None, description="Registered voice name")
     # Optional per-request voice params
     speaker: Optional[int] = Field(None, description="Multi-speaker index (if model supports)")
     noise_scale: Optional[float] = Field(None, description="Generator noise (default 0.667)")
@@ -50,24 +46,38 @@ def _piper_lib():
     import piper  # type: ignore
     return piper
 
-# Parse voices mapping
-def _parse_voices_env() -> Dict[str, str]:
+# Discover available models from directory
+def _discover_models() -> Dict[str, str]:
+    """Scan PIPER_MODELS_DIR for .onnx files and return voice_name -> model_path mapping"""
+    models = {}
+    if not os.path.exists(PIPER_MODELS_DIR):
+        print(f"[WARN] Models directory not found: {PIPER_MODELS_DIR}")
+        return models
+    
     try:
-        mapping = json.loads(PIPER_VOICES) if PIPER_VOICES.strip() else {}
-        if not isinstance(mapping, dict):
-            raise ValueError("PIPER_VOICES must be a JSON object")
-        return {k: str(v) for k, v in mapping.items()}
+        for filename in os.listdir(PIPER_MODELS_DIR):
+            if filename.endswith('.onnx'):
+                model_path = os.path.join(PIPER_MODELS_DIR, filename)
+                config_path = model_path + '.json'
+                
+                # Only include models that have corresponding config files
+                if os.path.exists(config_path):
+                    # Use filename without extension as voice name
+                    voice_name = filename[:-5]  # Remove .onnx
+                    models[voice_name] = model_path
+                else:
+                    print(f"[WARN] Missing config file for {filename}, skipping")
     except Exception as e:
-        raise RuntimeError(f"Failed to parse PIPER_VOICES: {e}")
+        print(f"[ERROR] Failed to scan models directory: {e}")
+    
+    return models
 
-VOICES: Dict[str, str] = _parse_voices_env()
+VOICES: Dict[str, str] = _discover_models()
 
 if not VOICES:
-    print("[WARN] No voices configured. Set PIPER_VOICES env var.")
-
-DEFAULT_VOICE = PIPER_DEFAULT_VOICE or (next(iter(VOICES.keys())) if VOICES else None)
-if DEFAULT_VOICE and DEFAULT_VOICE not in VOICES:
-    raise RuntimeError(f"PIPER_DEFAULT_VOICE='{DEFAULT_VOICE}' not in PIPER_VOICES keys={list(VOICES)}")
+    print(f"[WARN] No models found in {PIPER_MODELS_DIR}. Ensure .onnx files have corresponding .json configs.")
+else:
+    print(f"[INFO] Discovered {len(VOICES)} voice models: {list(VOICES.keys())}")
 
 # Cache of loaded PiperVoice objects
 _loaded_voices: Dict[str, object] = {}
@@ -113,19 +123,20 @@ def _apply_post_gain(pcm_bytes: bytes, volume: Optional[float]) -> bytes:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "voices": list(VOICES.keys()), "default_voice": DEFAULT_VOICE, "espeak_data": os.environ.get("ESPEAK_DATA_PATH")}
+    return {"status": "ok", "voices": list(VOICES.keys()), "models_dir": PIPER_MODELS_DIR, "espeak_data": os.environ.get("ESPEAK_DATA_PATH")}
 
 @app.get("/voices")
 def voices():
     return VOICES
 
-@app.post("/synthesize")
-def synth(req: SynthesisRequest = Body(...)):
+@app.post("/synthesize/{voice_name}")
+def synth(voice_name: str, req: SynthesisRequest = Body(...)):
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Empty text")
-    voice_name = req.voice or DEFAULT_VOICE
-    if not voice_name:
-        raise HTTPException(status_code=400, detail="No voice specified and no default configured")
+    
+    # Check if voice exists
+    if voice_name not in VOICES:
+        raise HTTPException(status_code=404, detail=f"Voice '{voice_name}' not found. Available voices: {list(VOICES.keys())}")
 
     voice = _load_voice(voice_name)
     sr = _get_sample_rate(voice)

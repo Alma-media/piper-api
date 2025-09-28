@@ -21,21 +21,20 @@ uv sync
 Set environment variables:
 
 ```bash
-# Required: JSON mapping of voice names to model paths
-export PIPER_VOICES='{"ru_irina":"/path/to/ru_RU-irina-medium.onnx", "ru_dmitri":"/path/to/ru_RU-dmitri-medium.onnx"}'
-
-# Optional: default voice (defaults to first voice in PIPER_VOICES)
-export PIPER_DEFAULT_VOICE=ru_irina
+# Required: Directory containing Piper models (.onnx files with corresponding .json configs)
+export PIPER_MODELS_DIR="/home/alma/LLM/piper"
 
 # Optional: eSpeak NG data path (defaults to /usr/share/espeak-ng-data)
 export ESPEAK_DATA_PATH=/usr/share/espeak-ng-data
 ```
 
+The server will automatically discover all `.onnx` model files in the specified directory that have corresponding `.json` configuration files. Voice names will be derived from the model filenames (without the `.onnx` extension).
+
 ## Running
 
 ```bash
 source .venv/bin/activate
-PIPER_VOICES='{"ru_irina":"/home/alma/LLM/piper/ru_RU-irina-medium.onnx", "ru_dmitri":"/home/alma/LLM/piper/ru_RU-dmitri-medium.onnx"}' uvicorn main:app --host 127.0.0.1 --port 8100 --reload
+PIPER_MODELS_DIR="/home/alma/LLM/piper" uvicorn main:app --host 127.0.0.1 --port 8100 --reload
 ```
 
 ## API Endpoints
@@ -54,12 +53,11 @@ Returns mapping of voice names to model paths.
 
 ### Synthesize Speech
 ```bash
-POST /synthesize
+POST /synthesize/{voice_name}
 Content-Type: application/json
 
 {
   "text": "Text to synthesize",
-  "voice": "ru_irina",           // optional, uses default if not specified
   "speaker": 0,                  // optional, multi-speaker model index
   "noise_scale": 0.667,          // optional, generator noise (default 0.667)
   "length_scale": 1.0,           // optional, phoneme length (default 1.0)
@@ -70,18 +68,25 @@ Content-Type: application/json
 }
 ```
 
+The voice name is specified in the URL path. If the voice is not found, returns 404.
+
 Returns WAV audio file.
 
 ## Examples
 
 ```bash
-# Basic synthesis
-curl -o output.wav -X POST 'http://127.0.0.1:8100/synthesize' \
+# Basic synthesis with ru_RU-irina-medium voice
+curl -o output.wav -X POST 'http://127.0.0.1:8100/synthesize/ru_RU-irina-medium' \
   -H 'Content-Type: application/json' \
-  -d '{"text":"Привет! Это проверка синтеза.","voice":"ru_irina"}'
+  -d '{"text":"Привет! Это проверка синтеза."}'
 
-# With speed and volume adjustment
-curl -o output.wav -X POST 'http://127.0.0.1:8100/synthesize' \
+# With speed and volume adjustment using ru_RU-dmitri-medium voice
+curl -o output.wav -X POST 'http://127.0.0.1:8100/synthesize/ru_RU-dmitri-medium' \
   -H 'Content-Type: application/json' \
-  -d '{"text":"Быстрая и громкая речь","voice":"ru_dmitri","rate":1.2,"volume":1.1}'
+  -d '{"text":"Быстрая и громкая речь","rate":1.2,"volume":1.1}'
+
+# Test with non-existent voice (returns 404)
+curl -X POST 'http://127.0.0.1:8100/synthesize/non-existent-voice' \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"This will fail"}'
 ```
