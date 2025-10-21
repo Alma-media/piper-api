@@ -58,9 +58,20 @@ PIPER_MODELS_DIR="path/to/models" uvicorn main:app --host 127.0.0.1 --port 8000 
 
 Run as an MCP (Model Context Protocol) server for integration with MCP-compatible clients:
 
+#### Option 1: Local Python
 ```bash
 source .venv/bin/activate
 PIPER_MODELS_DIR="path/to/models" python run_mcp_server.py
+```
+
+#### Option 2: Docker (Recommended)
+```bash
+# Using the convenience script
+./run_mcp_docker.sh path/to/models
+
+# Or manually with docker
+docker build -f Dockerfile.mcp -t piper-mcp .
+docker run -i --rm -v "path/to/models:/app/models:ro" piper-mcp
 ```
 
 The MCP server runs independently from the HTTP API and communicates via stdin/stdout. It provides the following tools:
@@ -239,6 +250,7 @@ To use the Piper TTS service as an MCP server, add it to your MCP client configu
 
 **For Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
+#### Local Python Configuration:
 ```json
 {
   "mcpServers": {
@@ -253,6 +265,29 @@ To use the Piper TTS service as an MCP server, add it to your MCP client configu
   }
 }
 ```
+
+#### Docker Configuration:
+```json
+{
+  "mcpServers": {
+    "piper-tts": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "/absolute/path/to/models:/app/models:ro",
+        "piper-mcp"
+      ]
+    }
+  }
+}
+```
+
+**For MCP Inspector**, use these settings:
+- **Transport Type**: STDIO  
+- **Command**: `docker`
+- **Arguments**: `run -i --rm -v "/home/alma/LLM/piper:/app/models:ro" piper-mcp`
+
+![inspector](./img/mcp-inspector.png)
 
 ### MCP Tools Available
 
@@ -292,9 +327,13 @@ You can run both the HTTP API and MCP server simultaneously since they operate i
 source .venv/bin/activate
 PIPER_MODELS_DIR="path/to/models" uvicorn main:app --host 127.0.0.1 --port 8000
 
-# Terminal 2: Start MCP server (for MCP clients)
+# Terminal 2: Start MCP server (choose one option)
+# Option A: Local Python
 source .venv/bin/activate
 PIPER_MODELS_DIR="path/to/models" python run_mcp_server.py
+
+# Option B: Docker (recommended)
+./run_mcp_docker.sh path/to/models
 ```
 
 ### MCP Usage Examples

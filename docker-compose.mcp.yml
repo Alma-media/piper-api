@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  piper-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    volumes:
+      # Mount your Piper models directory
+      - path/to/models:/app/models:ro
+    environment:
+      - PIPER_MODELS_DIR=/app/models
+      - ESPEAK_DATA_PATH=/usr/share/espeak-ng-data
+    # MCP servers typically run interactively via stdin/stdout
+    # This container is designed to be used with docker run -i
+    stdin_open: true
+    tty: false
