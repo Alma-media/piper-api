@@ -6,7 +6,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - /home/alma/LLM/piper:/app/models:ro
+      - path/to/models:/app/models:ro
     environment:
       - PIPER_MODELS_DIR=/app/models
       - ESPEAK_DATA_PATH=/usr/share/espeak-ng-data

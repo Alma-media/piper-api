@@ -1,6 +1,6 @@
 # Piper TTS API Server
 
-A FastAPI-based HTTP server for Piper text-to-speech synthesis.
+A FastAPI-based HTTP server for Piper text-to-speech synthesis with MCP (Model Context Protocol) support.
 
 ## Quick Start with Docker
 
@@ -37,7 +37,7 @@ Set environment variables:
 
 ```bash
 # Required: Directory containing Piper models (.onnx files with corresponding .json configs)
-export PIPER_MODELS_DIR="/home/alma/LLM/piper"
+export PIPER_MODELS_DIR="path/to/models"
 
 # Optional: eSpeak NG data path (defaults to /usr/share/espeak-ng-data)
 export ESPEAK_DATA_PATH=/usr/share/espeak-ng-data
@@ -47,10 +47,26 @@ The server will automatically discover all `.onnx` model files in the specified 
 
 ## Running
 
+### HTTP API Server
+
 ```bash
 source .venv/bin/activate
-PIPER_MODELS_DIR="/home/alma/LLM/piper" uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+PIPER_MODELS_DIR="path/to/models" uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+### MCP Server
+
+Run as an MCP (Model Context Protocol) server for integration with MCP-compatible clients:
+
+```bash
+source .venv/bin/activate
+PIPER_MODELS_DIR="path/to/models" python run_mcp_server.py
+```
+
+The MCP server runs independently from the HTTP API and communicates via stdin/stdout. It provides the following tools:
+- **text_to_speech**: Convert text to speech with full parameter control
+- **list_voices**: List all available TTS voices
+- **get_voice_info**: Get detailed information about a specific voice
 
 ## Docker
 
@@ -72,7 +88,7 @@ docker run -d \
   --name piper-tts \
   --restart unless-stopped \
   -p 8000:8000 \
-  -v /home/alma/LLM/piper:/app/models:ro \
+  -v path/to/models:/app/models:ro \
   piper-tts-api
 
 # Run with custom port
@@ -86,7 +102,7 @@ docker run -d \
 # Run interactively for debugging
 docker run -it --rm \
   -p 8000:8000 \
-  -v /home/alma/LLM/piper:/app/models:ro \
+  -v path/to/models:/app/models:ro \
   piper-tts-api
 ```
 
@@ -103,7 +119,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - /home/alma/LLM/piper:/app/models:ro
+      - path/to/models:/app/models:ro
     environment:
       - PIPER_MODELS_DIR=/app/models
       - ESPEAK_DATA_PATH=/usr/share/espeak-ng-data
@@ -212,3 +228,82 @@ curl -X POST 'http://127.0.0.1:8000/synthesize/non-existent-voice' \
   -H 'Content-Type: application/json' \
   -d '{"text":"This will fail"}'
 ```
+
+## MCP (Model Context Protocol) Integration
+
+The Piper TTS service includes a separate MCP server implementation (`run_mcp_server.py`) that runs independently from the HTTP API, allowing integration with MCP-compatible clients like Claude Desktop, IDEs, and other AI tools.
+
+### MCP Server Configuration
+
+To use the Piper TTS service as an MCP server, add it to your MCP client configuration:
+
+**For Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "piper-tts": {
+      "command": "python",
+      "args": ["/path/to/piper-api/run_mcp_server.py"],
+      "env": {
+        "PIPER_MODELS_DIR": "path/to/models",
+        "ESPEAK_DATA_PATH": "/usr/share/espeak-ng-data"
+      }
+    }
+  }
+}
+```
+
+### MCP Tools Available
+
+When running as an MCP server, the following tools are available:
+
+#### 1. text_to_speech
+Convert text to speech and return base64-encoded WAV audio.
+
+**Parameters:**
+- `text` (required): Text to convert to speech
+- `voice` (required): Voice name to use
+- `speaker` (optional): Multi-speaker index
+- `rate` (optional): Speech rate multiplier (1.05 = faster, 0.95 = slower)
+- `volume` (optional): Volume multiplier (1.2 = +20% louder)
+- `noise_scale` (optional): Generator noise scale
+- `length_scale` (optional): Phoneme length scale
+- `noise_w` (optional): Phoneme width noise
+- `sentence_silence` (optional): Silence after sentences
+
+#### 2. list_voices
+List all available TTS voices with their model information.
+
+**Parameters:** None
+
+#### 3. get_voice_info
+Get detailed information about a specific voice including language, dataset, sample rate, and multi-speaker capabilities.
+
+**Parameters:**
+- `voice` (required): Voice name to get information about
+
+### Running Both Services
+
+You can run both the HTTP API and MCP server simultaneously since they operate independently:
+
+```bash
+# Terminal 1: Start HTTP API server
+source .venv/bin/activate
+PIPER_MODELS_DIR="path/to/models" uvicorn main:app --host 127.0.0.1 --port 8000
+
+# Terminal 2: Start MCP server (for MCP clients)
+source .venv/bin/activate
+PIPER_MODELS_DIR="path/to/models" python run_mcp_server.py
+```
+
+### MCP Usage Examples
+
+Once configured with an MCP client, you can use natural language to interact with the TTS service:
+
+- "Convert this text to speech using the Russian voice"
+- "List all available TTS voices"
+- "Get information about the dmitri voice"
+- "Generate speech for this paragraph with a faster rate"
+
+The MCP server will handle the tool calls and return audio as base64-encoded data that can be decoded and played by the client.

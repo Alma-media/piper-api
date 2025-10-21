@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 # -------- Config via env vars --------
 # Directory containing Piper models (.onnx files with corresponding .json configs)
-# Example: export PIPER_MODELS_DIR="/home/alma/LLM/piper"
+# Example: export PIPER_MODELS_DIR="path/to/models"
 PIPER_MODELS_DIR = os.getenv("PIPER_MODELS_DIR", "./models")
 
 # eSpeak NG data path (needed by Piper phonemizer)
