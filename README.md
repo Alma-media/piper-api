@@ -287,6 +287,11 @@ To use the Piper TTS service as an MCP server, add it to your MCP client configu
 - **Command**: `docker`
 - **Arguments**: `run -i --rm -v "/home/alma/LLM/piper:/app/models:ro" piper-mcp`
 
+**Run inspector**
+```bash
+npx @modelcontextprotocol/inspector
+```
+
 ![inspector](./img/mcp-inspector.png)
 
 ### MCP Tools Available
